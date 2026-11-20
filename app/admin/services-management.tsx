@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import {
   AlertCircle,
   BriefcaseBusiness,
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Eye,
