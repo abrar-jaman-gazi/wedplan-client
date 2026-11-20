@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  RefreshCw,
   ShieldCheck,
   Users,
   UserRound,
@@ -23,6 +24,15 @@ import {
 import { signOut, useSession } from "@/lib/auth-client";
 
 type AdminSection = "overview" | "users" | "services" | "transactions";
+
+interface AdminStats {
+  totalUsers: number;
+  totalVendors: number;
+  totalCustomers: number;
+  totalServices: number;
+  pendingServices: number;
+  totalTransactions: number;
+}
 
 const navigation: {
   label: string;
@@ -62,6 +72,11 @@ export default function AdminDashboardPage() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState("");
 
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState("");
+  const [statsRefreshKey, setStatsRefreshKey] = useState(0);
+
   const user = session?.user;
   const userRole = user?.role;
 
@@ -81,6 +96,122 @@ export default function AdminDashboardPage() {
       router.replace("/vendor/dashboard");
     }
   }, [isPending, session, userRole, router]);
+
+  useEffect(() => {
+    if (isPending || !session || userRole !== "admin") {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const fetchAdminStats = async () => {
+      setStatsLoading(true);
+      setStatsError("");
+
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
+        if (!apiUrl) {
+          throw new Error("Backend API URL is not configured.");
+        }
+
+        const baseUrl = apiUrl.replace(/\/+$/, "");
+
+        const authResponse = await fetch(
+          `${baseUrl}/auth/token`,
+          {
+            method: "GET",
+            credentials: "include",
+            signal: controller.signal,
+          }
+        );
+
+        if (!authResponse.ok) {
+          throw new Error("Unable to retrieve your authentication token.");
+        }
+
+        const authData = await authResponse.json();
+
+        if (
+          typeof authData.token !== "string" ||
+          !authData.token
+        ) {
+          throw new Error("Authentication token is unavailable. Please sign in again.");
+        }
+
+        const response = await fetch(
+          `${baseUrl}/admin/stats`,
+          {
+            method: "GET",
+            credentials: "include",
+            headers: {
+              Authorization: `Bearer ${authData.token}`,
+            },
+            signal: controller.signal,
+          }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success || !result.data) {
+          throw new Error(
+            result.message || "Unable to load dashboard statistics."
+          );
+        }
+
+        const data = result.data;
+
+        const statValues = [
+          data.totalUsers,
+          data.totalVendors,
+          data.totalCustomers,
+          data.totalServices,
+          data.pendingServices,
+          data.totalTransactions,
+        ];
+
+        if (
+          !statValues.every(
+            (value: unknown) =>
+              typeof value === "number" &&
+              Number.isFinite(value) &&
+              value >= 0
+          )
+        ) {
+          throw new Error("The server returned invalid dashboard statistics.");
+        }
+
+        setStats({
+          totalUsers: data.totalUsers,
+          totalVendors: data.totalVendors,
+          totalCustomers: data.totalCustomers,
+          totalServices: data.totalServices,
+          pendingServices: data.pendingServices,
+          totalTransactions: data.totalTransactions,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+
+        setStatsError(
+          error instanceof Error
+            ? error.message
+            : "Something went wrong while loading dashboard statistics."
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setStatsLoading(false);
+        }
+      }
+    };
+
+    void fetchAdminStats();
+
+    return () => {
+      controller.abort();
+    };
+  }, [isPending, session, userRole, statsRefreshKey]);
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
@@ -108,6 +239,10 @@ export default function AdminDashboardPage() {
   const selectSection = (section: AdminSection) => {
     setActiveSection(section);
     setIsMobileMenuOpen(false);
+  };
+
+  const refreshStats = () => {
+    setStatsRefreshKey((current) => current + 1);
   };
 
   if (isPending || !user) {
@@ -312,6 +447,10 @@ export default function AdminDashboardPage() {
           {activeSection === "overview" && (
             <OverviewSection
               adminName={user.name || "Administrator"}
+              stats={stats}
+              statsLoading={statsLoading}
+              statsError={statsError}
+              onRefresh={refreshStats}
               onSelectSection={selectSection}
             />
           )}
@@ -335,11 +474,27 @@ export default function AdminDashboardPage() {
 
 function OverviewSection({
   adminName,
+  stats,
+  statsLoading,
+  statsError,
+  onRefresh,
   onSelectSection,
 }: {
   adminName: string;
+  stats: AdminStats | null;
+  statsLoading: boolean;
+  statsError: string;
+  onRefresh: () => void;
   onSelectSection: (section: AdminSection) => void;
 }) {
+  const displayValue = (value: number | undefined) => {
+    if (statsLoading && !stats) {
+      return "...";
+    }
+
+    return value === undefined ? "—" : value.toLocaleString();
+  };
+
   return (
     <>
       <section className="relative overflow-hidden rounded-3xl bg-[#49313e] px-6 py-9 text-white sm:px-9 sm:py-12">
@@ -372,61 +527,94 @@ function OverviewSection({
       </section>
 
       <section className="mt-9">
-        <div className="mb-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#a47d50]">
-            Platform overview
-          </p>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#a47d50]">
+              Platform overview
+            </p>
 
-          <h2 className="mt-2 text-2xl font-semibold text-[#34232e]">
-            WedPlan statistics
-          </h2>
+            <h2 className="mt-2 text-2xl font-semibold text-[#34232e]">
+              WedPlan statistics
+            </h2>
 
-          <p className="mt-2 text-sm text-[#81777a]">
-            Live platform statistics will appear after connecting
-            the administration API.
-          </p>
+            <p className="mt-2 text-sm text-[#81777a]">
+              Live statistics retrieved from your WedPlan database.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={statsLoading}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#e8ded1] bg-white px-4 py-2.5 text-sm font-semibold text-[#8f693f] transition hover:bg-[#f8f3ed] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw
+              size={16}
+              className={statsLoading ? "animate-spin" : ""}
+            />
+            {statsLoading ? "Refreshing..." : "Refresh statistics"}
+          </button>
         </div>
+
+        {statsError && (
+          <div
+            role="alert"
+            className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4"
+          >
+            <p className="text-sm text-red-700">
+              {statsError}
+            </p>
+
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+            >
+              Try again
+            </button>
+          </div>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <SummaryCard
             title="Registered users"
-            value="—"
-            description="Awaiting user statistics API"
+            value={displayValue(stats?.totalUsers)}
+            description="Total registered platform accounts"
             icon={<Users size={21} />}
           />
 
           <SummaryCard
             title="Total vendors"
-            value="—"
-            description="Awaiting vendor statistics API"
+            value={displayValue(stats?.totalVendors)}
+            description="Registered wedding service vendors"
             icon={<StoreIcon />}
           />
 
           <SummaryCard
             title="Total customers"
-            value="—"
-            description="Awaiting customer statistics API"
+            value={displayValue(stats?.totalCustomers)}
+            description="Registered customer accounts"
             icon={<UserRound size={21} />}
           />
 
           <SummaryCard
             title="Total services"
-            value="—"
-            description="Awaiting service statistics API"
+            value={displayValue(stats?.totalServices)}
+            description="Services submitted to WedPlan"
             icon={<BriefcaseBusiness size={21} />}
           />
 
           <SummaryCard
             title="Pending services"
-            value="—"
-            description="Awaiting approval statistics API"
+            value={displayValue(stats?.pendingServices)}
+            description="Services awaiting admin approval"
             icon={<ClipboardList size={21} />}
           />
 
           <SummaryCard
             title="Total transactions"
-            value="—"
-            description="Awaiting transaction statistics API"
+            value={displayValue(stats?.totalTransactions)}
+            description="Recorded platform transactions"
             icon={<CreditCard size={21} />}
           />
         </div>
