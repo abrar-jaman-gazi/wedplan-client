@@ -1,6 +1,4 @@
-
 "use client";
-
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -22,12 +20,26 @@ import {
   ShieldCheck,
   Sparkles,
   Store,
-  UserRound,
   X,
 } from "lucide-react";
-
 import { signOut, useSession } from "@/lib/auth-client";
 
+interface VendorBooking {
+  _id: string;
+  serviceName: string;
+  eventDate: string;
+  eventLocation: string;
+  customerName: string;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+}
+
+interface VendorBookingsResponse {
+  success: boolean;
+  data?: VendorBooking[];
+  message?: string;
+}
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 const navigation = [
   {
     label: "Overview",
@@ -55,42 +67,90 @@ const navigation = [
     icon: Crown,
   },
 ];
-
 export default function VendorDashboardPage() {
   const router = useRouter();
   const { data: session, isPending } = useSession();
-
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState("");
-
+  const [bookings, setBookings] = useState<VendorBooking[]>([]);
+  const [bookingsLoading, setBookingsLoading] = useState(true);
+  const [bookingsError, setBookingsError] = useState("");
   const user = session?.user;
   const userRole = user?.role;
-
   useEffect(() => {
     if (isPending) {
       return;
     }
-
     if (!session) {
       router.replace("/sign-in");
       return;
     }
-
     if (userRole === "customer") {
       router.replace("/customer/dashboard");
     } else if (userRole === "admin") {
       router.replace("/admin/dashboard");
     }
   }, [isPending, session, userRole, router]);
+  const loadVendorBookings = async () => {
+    if (!API_URL) {
+      setBookingsError("The API URL is not configured.");
+      setBookingsLoading(false);
+      return;
+    }
+
+    setBookingsLoading(true);
+    setBookingsError("");
+
+    try {
+      const tokenResponse = await fetch(`${API_URL}/auth/token`, {
+        method: "GET",
+        credentials: "include",
+      });
+      const tokenResult = (await tokenResponse.json()) as {
+        token?: string;
+        message?: string;
+      };
+
+      if (!tokenResponse.ok || !tokenResult.token) {
+        throw new Error(tokenResult.message || "Unable to authenticate your request.");
+      }
+
+      const response = await fetch(`${API_URL}/bookings/vendor`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${tokenResult.token}`,
+        },
+      });
+      const result = (await response.json()) as VendorBookingsResponse;
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Unable to load booking requests.");
+      }
+
+      setBookings(Array.isArray(result.data) ? result.data : []);
+    } catch (error) {
+      setBookingsError(
+        error instanceof Error ? error.message : "Unable to load booking requests."
+      );
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isPending && user && userRole === "vendor") {
+      void loadVendorBookings();
+    }
+  }, [isPending, user?.id, userRole]);
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
     setSignOutError("");
-
     try {
       const result = await signOut();
-
       if (result.error) {
         setSignOutError(
           result.error.message || "Unable to sign out. Please try again."
@@ -98,7 +158,6 @@ export default function VendorDashboardPage() {
         setIsSigningOut(false);
         return;
       }
-
       router.replace("/sign-in");
       router.refresh();
     } catch {
@@ -106,7 +165,6 @@ export default function VendorDashboardPage() {
       setIsSigningOut(false);
     }
   };
-
   if (isPending || !user) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#faf8f5]">
@@ -119,7 +177,6 @@ export default function VendorDashboardPage() {
       </main>
     );
   }
-
   if (userRole !== "vendor") {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#faf8f5] px-5">
@@ -145,7 +202,6 @@ export default function VendorDashboardPage() {
       </main>
     );
   }
-
   const firstName = user.name?.trim().split(/\s+/)[0] || "there";
   const businessName = user.businessName?.trim() || "Your business";
   const initials =
@@ -156,7 +212,6 @@ export default function VendorDashboardPage() {
       .map((part) => part[0])
       .join("")
       .toUpperCase() || "V";
-
   return (
     <main className="min-h-screen bg-[#faf8f5] text-[#49313e]">
       {isMobileMenuOpen && (
@@ -167,7 +222,6 @@ export default function VendorDashboardPage() {
           className="fixed inset-0 z-40 bg-[#241923]/40 lg:hidden"
         />
       )}
-
       <aside
         className={`fixed inset-y-0 left-0 z-50 flex w-[270px] flex-col border-r border-[#eee5dc] bg-white transition-transform duration-300 lg:translate-x-0 ${
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
@@ -180,7 +234,6 @@ export default function VendorDashboardPage() {
             </span>
             <span className="text-xl font-bold tracking-tight">WedPlan</span>
           </Link>
-
           <button
             type="button"
             aria-label="Close menu"
@@ -190,17 +243,14 @@ export default function VendorDashboardPage() {
             <X size={20} />
           </button>
         </div>
-
         <div className="px-5 py-7">
           <p className="mb-4 px-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[#b0a39e]">
             Vendor workspace
           </p>
-
           <nav className="space-y-1">
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = item.href === "/vendor/dashboard";
-
               return (
                 <Link
                   key={item.href}
@@ -222,7 +272,6 @@ export default function VendorDashboardPage() {
             })}
           </nav>
         </div>
-
         <div className="mt-auto p-5">
           <div className="rounded-2xl bg-[#f8f3ed] p-4">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#9a7045]">
@@ -242,7 +291,6 @@ export default function VendorDashboardPage() {
               <ArrowRight size={14} />
             </Link>
           </div>
-
           <button
             type="button"
             onClick={handleSignOut}
@@ -252,7 +300,6 @@ export default function VendorDashboardPage() {
             <LogOut size={19} />
             {isSigningOut ? "Signing out..." : "Sign out"}
           </button>
-
           {signOutError && (
             <p role="alert" className="mt-2 px-3 text-xs text-red-600">
               {signOutError}
@@ -260,7 +307,6 @@ export default function VendorDashboardPage() {
           )}
         </div>
       </aside>
-
       <div className="min-h-screen lg:pl-[270px]">
         <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-[#eee5dc] bg-white/95 px-5 backdrop-blur sm:px-8 lg:px-10">
           <div className="flex items-center gap-3">
@@ -272,7 +318,6 @@ export default function VendorDashboardPage() {
             >
               <Menu size={22} />
             </button>
-
             <div>
               <p className="text-xs text-[#a39799]">Workspace</p>
               <h1 className="text-sm font-semibold text-[#49313e]">
@@ -280,7 +325,6 @@ export default function VendorDashboardPage() {
               </h1>
             </div>
           </div>
-
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold text-[#49313e]">
@@ -293,12 +337,10 @@ export default function VendorDashboardPage() {
             </div>
           </div>
         </header>
-
         <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
           <section className="relative overflow-hidden rounded-3xl bg-[#49313e] px-6 py-9 text-white sm:px-9 sm:py-12">
             <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full border border-white/10" />
             <div className="absolute -right-4 -top-12 h-52 w-52 rounded-full border border-white/10" />
-
             <div className="relative z-10 max-w-2xl">
               <p className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-[#e2c99d]">
                 Vendor workspace
@@ -313,7 +355,6 @@ export default function VendorDashboardPage() {
                 Manage your wedding services, respond to booking requests,
                 and grow your business with WedPlan.
               </p>
-
               <Link
                 href="/vendor/services"
                 className="mt-7 inline-flex items-center gap-2 rounded-xl bg-[#e2c99d] px-5 py-3.5 text-sm font-bold text-[#49313e] transition hover:bg-white"
@@ -323,7 +364,6 @@ export default function VendorDashboardPage() {
               </Link>
             </div>
           </section>
-
           <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryCard
               title="Active services"
@@ -333,14 +373,14 @@ export default function VendorDashboardPage() {
             />
             <SummaryCard
               title="Booking requests"
-              value="—"
-              description="Connect your booking records"
+              value={bookings.length.toString()}
+              description="All customer requests"
               icon={<CalendarDays size={21} />}
             />
             <SummaryCard
               title="Pending requests"
-              value="—"
-              description="Awaiting booking API"
+              value={bookings.filter((booking) => booking.status === "pending").length.toString()}
+              description="Awaiting your response"
               icon={<ClipboardList size={21} />}
             />
             <SummaryCard
@@ -350,7 +390,6 @@ export default function VendorDashboardPage() {
               icon={<CircleDollarSign size={21} />}
             />
           </section>
-
           <section className="mt-10 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
             <div className="rounded-2xl border border-[#eee5dc] bg-white p-6 sm:p-7">
               <div className="flex items-center justify-between gap-3">
@@ -364,7 +403,6 @@ export default function VendorDashboardPage() {
                 </div>
                 <BriefcaseBusiness size={22} className="text-[#a47d50]" />
               </div>
-
               <div className="mt-7 rounded-xl border border-dashed border-[#e6ded8] bg-[#fcfaf7] px-5 py-9 text-center">
                 <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#f2e8d9] text-[#9a7045]">
                   <PackagePlus size={22} />
@@ -385,7 +423,6 @@ export default function VendorDashboardPage() {
                 </Link>
               </div>
             </div>
-
             <div className="rounded-2xl border border-[#eee5dc] bg-white p-6 sm:p-7">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -398,20 +435,47 @@ export default function VendorDashboardPage() {
                 </div>
                 <Bell size={21} className="text-[#a47d50]" />
               </div>
-
-              <div className="mt-7 rounded-xl border border-dashed border-[#e6ded8] bg-[#fcfaf7] px-4 py-8 text-center">
-                <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[#f2e8d9] text-[#9a7045]">
-                  <CalendarDays size={21} />
-                </span>
-                <h3 className="mt-4 text-sm font-semibold text-[#49313e]">
-                  Your requests will appear here
-                </h3>
-                <p className="mt-2 text-xs leading-5 text-[#81777a]">
-                  Booking information will appear after the booking API is
-                  connected.
-                </p>
-              </div>
-
+              {bookingsLoading ? (
+                <div className="mt-7 rounded-xl bg-[#fcfaf7] px-4 py-8 text-center text-sm text-[#81777a]">
+                  Loading booking requests...
+                </div>
+              ) : bookingsError ? (
+                <div className="mt-7 rounded-xl bg-red-50 px-4 py-6 text-center text-sm text-red-700">
+                  {bookingsError}
+                  <button type="button" onClick={() => void loadVendorBookings()} className="mt-3 block w-full font-semibold underline">
+                    Try again
+                  </button>
+                </div>
+              ) : bookings.length === 0 ? (
+                <div className="mt-7 rounded-xl border border-dashed border-[#e6ded8] bg-[#fcfaf7] px-4 py-8 text-center">
+                  <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[#f2e8d9] text-[#9a7045]">
+                    <CalendarDays size={21} />
+                  </span>
+                  <h3 className="mt-4 text-sm font-semibold text-[#49313e]">
+                    No booking requests yet
+                  </h3>
+                  <p className="mt-2 text-xs leading-5 text-[#81777a]">
+                    New customer requests for your services will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-6 space-y-3">
+                  {bookings.slice(0, 3).map((booking) => (
+                    <div key={booking._id} className="rounded-xl border border-[#eee5dc] bg-[#fcfaf7] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-[#49313e]">{booking.serviceName}</p>
+                          <p className="mt-1 text-xs text-[#81777a]">Customer: {booking.customerName}</p>
+                          <p className="mt-1 text-xs text-[#81777a]">{booking.eventDate} · {booking.eventLocation}</p>
+                        </div>
+                        <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold capitalize text-amber-700">
+                          {booking.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <Link
                 href="/vendor/bookings"
                 className="mt-5 flex items-center justify-between rounded-xl border border-[#eee5dc] px-4 py-3 text-sm font-medium text-[#49313e] transition hover:border-[#d7c1a4] hover:bg-[#fcfaf7]"
@@ -421,7 +485,6 @@ export default function VendorDashboardPage() {
               </Link>
             </div>
           </section>
-
           <section className="mt-6 grid gap-6 lg:grid-cols-2">
             <div className="rounded-2xl border border-[#eee5dc] bg-white p-6 sm:p-7">
               <div className="flex items-center gap-3">
@@ -437,7 +500,6 @@ export default function VendorDashboardPage() {
                   </p>
                 </div>
               </div>
-
               <div className="mt-5 rounded-xl bg-[#faf8f5] p-4">
                 <p className="text-sm font-semibold text-[#49313e]">
                   Plan information
@@ -448,7 +510,6 @@ export default function VendorDashboardPage() {
                   API is connected.
                 </p>
               </div>
-
               <Link
                 href="/vendor/subscription"
                 className="mt-5 flex items-center justify-between rounded-xl border border-[#eee5dc] px-4 py-3 text-sm font-medium text-[#49313e] transition hover:border-[#d7c1a4] hover:bg-[#fcfaf7]"
@@ -457,7 +518,6 @@ export default function VendorDashboardPage() {
                 <ChevronRight size={17} className="text-[#a39799]" />
               </Link>
             </div>
-
             <div className="rounded-2xl border border-[#eee5dc] bg-white p-6 sm:p-7">
               <h2 className="text-lg font-semibold text-[#34232e]">
                 Business profile
@@ -465,7 +525,6 @@ export default function VendorDashboardPage() {
               <p className="mt-1 text-xs text-[#a39799]">
                 Your registered vendor information.
               </p>
-
               <div className="mt-6 flex items-center gap-3 rounded-xl bg-[#faf8f5] p-4">
                 <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#f0e4d5] text-sm font-bold text-[#8f693f]">
                   <Store size={20} />
@@ -479,7 +538,6 @@ export default function VendorDashboardPage() {
                   </p>
                 </div>
               </div>
-
               <Link
                 href="/vendor/profile"
                 className="mt-5 flex items-center justify-between rounded-xl border border-[#eee5dc] px-4 py-3 text-sm font-medium text-[#49313e] transition hover:border-[#d7c1a4] hover:bg-[#fcfaf7]"
@@ -490,7 +548,6 @@ export default function VendorDashboardPage() {
                 </span>
                 <ChevronRight size={17} className="text-[#a39799]" />
               </Link>
-
               <div className="mt-5 flex items-start gap-3 rounded-xl bg-[#f8f3ed] p-4">
                 <CheckCircle2
                   size={19}
@@ -507,7 +564,6 @@ export default function VendorDashboardPage() {
               </div>
             </div>
           </section>
-
           <footer className="mt-10 border-t border-[#eee5dc] py-6 text-center text-xs text-[#a39799]">
             WedPlan · Your day, your way.
           </footer>
@@ -516,7 +572,6 @@ export default function VendorDashboardPage() {
     </main>
   );
 }
-
 function SummaryCard({
   title,
   value,
@@ -541,7 +596,6 @@ function SummaryCard({
     </div>
   );
 }
-
 function HeartIcon() {
   return <Sparkles size={21} />;
 }
