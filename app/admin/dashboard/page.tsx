@@ -1,6 +1,6 @@
 
 "use client";
-
+import ServicesManagement from "@/app/admin/services-management";
 import UsersManagement from "@/app/admin/users-management";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
@@ -664,23 +664,7 @@ function UsersSection() {
 }
 
 function ServicesSection() {
-  return (
-    <ManagementPlaceholder
-      eyebrow="Service moderation"
-      title="Manage wedding services"
-      description="Review service submissions and manage the services displayed on WedPlan."
-      icon={<BriefcaseBusiness size={25} />}
-      features={[
-        "View all submitted services",
-        "Search and filter service submissions",
-        "Review pending services",
-        "Approve submitted services",
-        "Reject submitted services",
-        "Change the status of published services",
-        "Delete inappropriate services",
-      ]}
-    />
-  );
+  return <ServicesManagement />;
 }
 
 function TransactionsSection() {
