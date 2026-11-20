@@ -1,6 +1,7 @@
 
 "use client";
 
+import UsersManagement from "@/app/admin/users-management";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -659,22 +660,7 @@ function OverviewSection({
 }
 
 function UsersSection() {
-  return (
-    <ManagementPlaceholder
-      eyebrow="Account administration"
-      title="Manage users"
-      description="View and manage all registered WedPlan customers and vendors."
-      icon={<Users size={25} />}
-      features={[
-        "View all registered users",
-        "Search by user name or email",
-        "Filter users by Customer, Vendor, or Admin role",
-        "View individual user details",
-        "Block user accounts",
-        "Unblock previously blocked accounts",
-      ]}
-    />
-  );
+  return <UsersManagement />;
 }
 
 function ServicesSection() {
