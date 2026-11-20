@@ -2,7 +2,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { motion } from "motion/react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -11,6 +12,8 @@ import {
   Flower2,
   Gem,
   Heart,
+  Loader2,
+  MapPin,
   Menu,
   Music,
   Search,
@@ -20,40 +23,73 @@ import {
   X,
 } from "lucide-react";
 
+type Service = {
+  _id: string;
+  serviceName: string;
+  category: string;
+  description: string;
+  price: number;
+  location: string;
+  images: string[];
+  vendor?: {
+    _id: string;
+    name: string;
+    businessName?: string;
+  };
+};
+
+type ServicesResponse = {
+  success: boolean;
+  data: Service[];
+  pagination?: {
+    total: number;
+    totalPages: number;
+  };
+  message?: string;
+};
+
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+
 const categories = [
   {
     name: "Photography",
+    backendCategory: "Photography & Videography",
     description: "Capture every beautiful moment.",
     icon: Camera,
     image: "photo-card",
   },
   {
     name: "Venues",
+    backendCategory: "Wedding Venues",
     description: "Find the perfect place to celebrate.",
     icon: Gem,
     image: "venue-card",
   },
   {
     name: "Decoration",
+    backendCategory: "Decoration & Florist",
     description: "Bring your dream wedding to life.",
     icon: Flower2,
     image: "decoration-card",
   },
   {
     name: "Catering",
+    backendCategory: "Catering Services",
     description: "Delight your guests with great food.",
     icon: Utensils,
     image: "catering-card",
   },
   {
     name: "Music & Entertainment",
-    description: "Make your celebration unforgettable.",
+    backendCategory: "Wedding Fashion",
+    description: "Explore wedding fashion and celebration essentials.",
     icon: Music,
     image: "music-card",
   },
   {
-    name: "Wedding Planning",
-    description: "Let the experts handle every detail.",
+    name: "Makeup & Styling",
+    backendCategory: "Makeup & Styling",
+    description: "Find the perfect look for your special day.",
     icon: Heart,
     image: "planning-card",
   },
@@ -83,9 +119,74 @@ const benefits = [
   },
 ];
 
+const formatPrice = (price: number) =>
+  new Intl.NumberFormat("en-BD", {
+    style: "currency",
+    currency: "BDT",
+    maximumFractionDigits: 0,
+  }).format(price);
+
+const reveal = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0 },
+};
+
 export default function Home() {
   const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [services, setServices] = useState<Service[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(true);
+  const [servicesError, setServicesError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadFeaturedServices = async () => {
+      if (!API_URL) {
+        setServicesError("The service API is not configured.");
+        setServicesLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `${API_URL}/services?page=1&limit=12&sort=newest`,
+          {
+            method: "GET",
+            signal: controller.signal,
+            cache: "no-store",
+          }
+        );
+
+        const result = (await response.json()) as ServicesResponse;
+
+        if (!response.ok || !result.success || !Array.isArray(result.data)) {
+          throw new Error(
+            result.message || "Unable to load featured wedding services."
+          );
+        }
+
+        setServices(result.data.slice(0, 6));
+        setServicesError("");
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+
+        setServicesError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load featured services."
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setServicesLoading(false);
+        }
+      }
+    };
+
+    void loadFeaturedServices();
+
+    return () => controller.abort();
+  }, []);
 
   const filteredCategories = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -95,9 +196,22 @@ export default function Home() {
     return categories.filter(
       (category) =>
         category.name.toLowerCase().includes(query) ||
+        category.backendCategory.toLowerCase().includes(query) ||
         category.description.toLowerCase().includes(query)
     );
   }, [search]);
+
+  const handleSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const query = search.trim();
+
+    if (query) {
+      window.location.href = `/services?search=${encodeURIComponent(query)}`;
+    } else {
+      window.location.href = "/services";
+    }
+  };
 
   return (
     <main>
@@ -153,40 +267,50 @@ export default function Home() {
         <div className="hero-image" />
         <div className="hero-overlay" />
 
-        <div className="hero-content page-container">
-          <span className="eyebrow hero-eyebrow">
+        <motion.div
+          className="hero-content page-container"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            hidden: {},
+            visible: {
+              transition: { staggerChildren: 0.15 },
+            },
+          }}
+        >
+          <motion.span className="eyebrow hero-eyebrow" variants={reveal}>
             <Sparkles size={14} /> YOUR DREAM WEDDING STARTS HERE
-          </span>
+          </motion.span>
 
-          <h1>
+          <motion.h1 variants={reveal}>
             Every love story
             <br />
             deserves a <em>beautiful</em>
             <br />
             beginning.
-          </h1>
+          </motion.h1>
 
-          <p className="hero-description">
+          <motion.p className="hero-description" variants={reveal}>
             From finding the perfect venue to choosing every little detail,
             discover everything you need to make your wedding unforgettable.
-          </p>
+          </motion.p>
 
-          <div className="hero-buttons">
-            <a href="#services" className="button button-gold">
+          <motion.div className="hero-buttons" variants={reveal}>
+            <Link href="/services" className="button button-gold">
               Explore wedding services <ArrowRight size={17} />
-            </a>
+            </Link>
             <a href="#how-it-works" className="hero-text-link">
               Discover WedPlan <ArrowUpRight size={16} />
             </a>
-          </div>
+          </motion.div>
 
-          <div className="hero-note">
+          <motion.div className="hero-note" variants={reveal}>
             <span className="hero-note-icon">
               <Heart size={16} />
             </span>
             <span>One place for all your wedding plans.</span>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
         <div className="hero-bottom page-container">
           <span>MADE FOR YOUR MOST SPECIAL DAY</span>
@@ -194,7 +318,15 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="intro-section page-container" id="why-wedplan">
+      <motion.section
+        className="intro-section page-container"
+        id="why-wedplan"
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.2 }}
+        variants={reveal}
+        transition={{ duration: 0.6 }}
+      >
         <div className="intro-label">
           <span className="eyebrow">A LITTLE MORE MAGIC</span>
           <span className="intro-line" />
@@ -211,7 +343,7 @@ export default function Home() {
             spend less time searching and more time dreaming.
           </p>
         </div>
-      </section>
+      </motion.section>
 
       <section className="services-section" id="services">
         <div className="page-container">
@@ -230,7 +362,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="service-search">
+          <form className="service-search" onSubmit={handleSearch}>
             <Search size={19} />
             <input
               type="search"
@@ -248,35 +380,47 @@ export default function Home() {
                 <X size={17} />
               </button>
             )}
-            <span className="search-hint">EXPLORE SERVICES</span>
-          </div>
+            <button type="submit" className="text-button">
+              Search
+            </button>
+          </form>
 
           <div className="category-grid">
-            {filteredCategories.map((category) => {
+            {filteredCategories.map((category, index) => {
               const Icon = category.icon;
 
               return (
-                <Link
-                  href="/sign-up"
-                  className="category-card"
+                <motion.div
                   key={category.name}
+                  initial="hidden"
+                  whileInView="visible"
+                  viewport={{ once: true, amount: 0.15 }}
+                  variants={reveal}
+                  transition={{ duration: 0.45, delay: index * 0.06 }}
                 >
-                  <div className={`category-image ${category.image}`}>
-                    <span className="category-icon">
-                      <Icon size={20} />
-                    </span>
-                    <span className="category-arrow">
-                      <ArrowUpRight size={19} />
-                    </span>
-                  </div>
-                  <div className="category-info">
-                    <div>
-                      <h3>{category.name}</h3>
-                      <p>{category.description}</p>
+                  <Link
+                    href={`/services?category=${encodeURIComponent(
+                      category.backendCategory
+                    )}`}
+                    className="category-card"
+                  >
+                    <div className={`category-image ${category.image}`}>
+                      <span className="category-icon">
+                        <Icon size={20} />
+                      </span>
+                      <span className="category-arrow">
+                        <ArrowUpRight size={19} />
+                      </span>
                     </div>
-                    <ArrowRight size={18} className="category-link-icon" />
-                  </div>
-                </Link>
+                    <div className="category-info">
+                      <div>
+                        <h3>{category.name}</h3>
+                        <p>{category.description}</p>
+                      </div>
+                      <ArrowRight size={18} className="category-link-icon" />
+                    </div>
+                  </Link>
+                </motion.div>
               );
             })}
           </div>
@@ -284,7 +428,7 @@ export default function Home() {
           {filteredCategories.length === 0 && (
             <div className="empty-search">
               <Search size={26} />
-              <h3>No matching services found</h3>
+              <h3>No matching categories found</h3>
               <p>Try another search term to explore our categories.</p>
               <button
                 type="button"
@@ -300,11 +444,138 @@ export default function Home() {
             <span>
               <Heart size={15} /> Find inspiration for every detail.
             </span>
-            <Link href="/sign-up" className="text-button">
-              Start exploring <ArrowUpRight size={16} />
+            <Link href="/services" className="text-button">
+              Browse all services <ArrowUpRight size={16} />
             </Link>
           </div>
         </div>
+      </section>
+
+      <section className="featured-section page-container">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">HANDPICKED FOR YOUR DAY</span>
+            <h2>
+              Featured wedding
+              <br />
+              <em>services.</em>
+            </h2>
+          </div>
+          <p>
+            Explore approved services from vendors on WedPlan and discover
+            the right fit for your celebration.
+          </p>
+        </div>
+
+        {servicesLoading ? (
+          <div className="flex min-h-52 items-center justify-center rounded-2xl border border-[#eee5dc] bg-white">
+            <div className="text-center">
+              <Loader2 className="mx-auto animate-spin text-[#a77946]" size={32} />
+              <p className="mt-3 text-sm text-[#897d82]">
+                Loading featured services...
+              </p>
+            </div>
+          </div>
+        ) : servicesError ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
+            <p className="font-semibold text-red-700">
+              Featured services are temporarily unavailable.
+            </p>
+            <p className="mt-2 text-sm text-red-600">{servicesError}</p>
+            <Link
+              href="/services"
+              className="mt-5 inline-flex items-center gap-2 font-semibold text-[#49313e]"
+            >
+              Browse services <ArrowRight size={16} />
+            </Link>
+          </div>
+        ) : services.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[#dfd0c2] bg-white px-6 py-12 text-center">
+            <Heart className="mx-auto text-[#a77946]" size={30} />
+            <h3 className="mt-4 text-xl font-semibold text-[#49313e]">
+              New services are on their way
+            </h3>
+            <p className="mt-2 text-sm text-[#897d82]">
+              Check the service catalogue to explore available wedding services.
+            </p>
+            <Link href="/services" className="mt-5 inline-flex items-center gap-2 font-semibold text-[#49313e]">
+              Explore services <ArrowRight size={16} />
+            </Link>
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {services.map((service, index) => (
+                <motion.article
+                  key={service._id}
+                  className="overflow-hidden rounded-2xl border border-[#eee5dc] bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+                  initial="hidden"
+                  whileInView="visible"
+                  viewport={{ once: true, amount: 0.1 }}
+                  variants={reveal}
+                  transition={{ duration: 0.45, delay: index * 0.07 }}
+                >
+                  <Link href={`/services/${service._id}`} className="block">
+                    <div className="relative h-56 overflow-hidden bg-[#f2ece4]">
+                      {service.images?.[0] ? (
+                        <img
+                          src={service.images[0]}
+                          alt={service.serviceName}
+                          className="h-full w-full object-cover transition duration-500 hover:scale-105"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-[#a77946]">
+                          <Heart size={38} />
+                        </div>
+                      )}
+                      <span className="absolute left-4 top-4 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-[#49313e]">
+                        {service.category}
+                      </span>
+                    </div>
+
+                    <div className="p-5">
+                      <h3 className="line-clamp-1 text-lg font-bold text-[#49313e]">
+                        {service.serviceName}
+                      </h3>
+                      <p className="mt-2 line-clamp-2 min-h-10 text-sm leading-6 text-[#897d82]">
+                        {service.description}
+                      </p>
+
+                      <div className="mt-4 flex items-center gap-2 text-sm text-[#897d82]">
+                        <MapPin size={16} className="shrink-0 text-[#a77946]" />
+                        <span className="line-clamp-1">{service.location}</span>
+                      </div>
+
+                      <div className="mt-5 flex items-center justify-between border-t border-[#f0e7df] pt-4">
+                        <div>
+                          <p className="text-xs text-[#a09599]">Starting price</p>
+                          <p className="mt-1 text-lg font-bold text-[#49313e]">
+                            {formatPrice(service.price)}
+                          </p>
+                        </div>
+                        <span className="inline-flex items-center gap-1 text-sm font-semibold text-[#a77946]">
+                          View details <ArrowUpRight size={16} />
+                        </span>
+                      </div>
+
+                      {service.vendor && (
+                        <p className="mt-3 text-xs text-[#897d82]">
+                          By {service.vendor.businessName || service.vendor.name}
+                        </p>
+                      )}
+                    </div>
+                  </Link>
+                </motion.article>
+              ))}
+            </div>
+
+            <div className="mt-8 text-center">
+              <Link href="/services" className="button button-dark">
+                View all wedding services <ArrowRight size={17} />
+              </Link>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="process-section page-container" id="how-it-works">
@@ -395,7 +666,7 @@ export default function Home() {
         </h2>
         <p>
           Your dream wedding is made of a thousand little moments.
-         Let&apos;s start planning them.
+          Let&apos;s start planning them.
         </p>
         <div className="final-cta-actions">
           <Link href="/sign-up" className="button button-gold">
@@ -430,7 +701,7 @@ export default function Home() {
         </div>
 
         <div className="page-container footer-bottom">
-         <span>© 2026 WedPlan. All rights reserved.</span>
+          <span>© 2026 WedPlan. All rights reserved.</span>
           <span>MADE WITH LOVE <Heart size={13} fill="currentColor" /></span>
         </div>
       </footer>
