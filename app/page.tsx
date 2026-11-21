@@ -427,6 +427,9 @@ export default function Home() {
               For vendors
 
             </a>
+            <Link href="/sign-in" onClick={() => setMenuOpen(false)}>
+  Log in
+</Link>
 
           </nav>
 
