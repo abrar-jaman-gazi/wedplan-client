@@ -238,8 +238,14 @@ export default function AdminDashboardPage() {
   };
 
   const selectSection = (section: AdminSection) => {
-    setActiveSection(section);
     setIsMobileMenuOpen(false);
+
+    if (section === "transactions") {
+      router.push("/admin/transactions");
+      return;
+    }
+
+    setActiveSection(section);
   };
 
   const refreshStats = () => {
