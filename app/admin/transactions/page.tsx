@@ -31,6 +31,13 @@ interface TransactionVendor {
   businessName?: string;
 }
 
+interface PaymentCardDetails {
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
 interface Transaction {
   _id: string;
   vendorId: string;
@@ -45,6 +52,7 @@ interface Transaction {
   paidAt: string | null;
   stripeSessionId?: string | null;
   stripeSubscriptionId?: string | null;
+  paymentMethod?: PaymentCardDetails | null;
 }
 
 interface Pagination {
@@ -748,6 +756,43 @@ export default function AdminTransactionsPage() {
                   {selectedTransaction.status}
                 </span>
               </div>
+
+              <section className="rounded-xl border border-[#e8ded1] bg-[#fdfbf9] p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-[#3f3039]">
+                    Payment card
+                  </h3>
+                  <CreditCard size={19} className="text-[#9a7045]" />
+                </div>
+                {selectedTransaction.paymentMethod ? (
+                  <>
+                    <p className="text-lg font-semibold tracking-wider text-[#3f3039]">
+                      •••• •••• •••• {selectedTransaction.paymentMethod.last4}
+                    </p>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-[#81777a]">Card brand</p>
+                        <p className="mt-1 font-medium capitalize">
+                          {selectedTransaction.paymentMethod.brand}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-[#81777a]">Expiry date</p>
+                        <p className="mt-1 font-medium">
+                          {String(selectedTransaction.paymentMethod.expMonth).padStart(2, "0")}/{selectedTransaction.paymentMethod.expYear}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-[#81777a]">
+                    Card details are not available for this transaction. They may not have been collected for older payments or the payment method may not be a card.
+                  </p>
+                )}
+                <p className="mt-3 text-xs leading-5 text-[#81777a]">
+                  Only masked card details are stored. Full card numbers and security codes are never available to WedPlan.
+                </p>
+              </section>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 {[
