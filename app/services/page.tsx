@@ -67,7 +67,19 @@ const formatPrice = (price: number) =>
 export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("");
+const [category, setCategory] = useState("");
+
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const requestedSearch = params.get("search") || "";
+  const requestedCategory = params.get("category") || "";
+
+  setSearch(requestedSearch);
+
+  setCategory(
+    categories.includes(requestedCategory) ? requestedCategory : ""
+  );
+}, []);
   const [location, setLocation] = useState("");
   const [sort, setSort] = useState("newest");
   const [page, setPage] = useState(1);

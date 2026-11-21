@@ -6,7 +6,6 @@ import {
   AlertCircle,
   Building2,
   CalendarDays,
-  Check,
   ChevronLeft,
   ChevronRight,
   Eye,

@@ -27,6 +27,7 @@ function SignInForm() {
   const [isLoading, setIsLoading] = useState(false);
 
   const registered = searchParams.get("registered") === "1";
+  const googleError = searchParams.get("error") === "google";
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -46,8 +47,15 @@ function SignInForm() {
         return;
       }
 
+      const authUrl = process.env.NEXT_PUBLIC_AUTH_URL;
+
+      if (!authUrl) {
+        setErrorMessage("Authentication server URL is not configured.");
+        return;
+      }
+
       const sessionResult = await fetch(
-        `${process.env.NEXT_PUBLIC_AUTH_URL}/api/auth/get-session`,
+        `${authUrl}/api/auth/get-session`,
         {
           credentials: "include",
           cache: "no-store",
@@ -55,18 +63,30 @@ function SignInForm() {
       );
 
       if (!sessionResult.ok) {
-        setErrorMessage("Login succeeded, but your session could not be verified.");
+        setErrorMessage(
+          "Login succeeded, but your session could not be verified."
+        );
         return;
       }
 
       const sessionData = await sessionResult.json();
-      const role = sessionData?.user?.role;
+      const user = sessionData?.user;
 
-      if (role === "customer") {
+      if (!user) {
+        setErrorMessage("Your session could not be verified.");
+        return;
+      }
+
+      if (user.isBlocked) {
+        setErrorMessage("Your account has been blocked.");
+        return;
+      }
+
+      if (user.role === "customer") {
         router.replace("/customer/dashboard");
-      } else if (role === "vendor") {
+      } else if (user.role === "vendor") {
         router.replace("/vendor/dashboard");
-      } else if (role === "admin") {
+      } else if (user.role === "admin") {
         router.replace("/admin/dashboard");
       } else {
         setErrorMessage("Your account has an unrecognized role.");
@@ -82,6 +102,35 @@ function SignInForm() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setErrorMessage("");
+    setIsLoading(true);
+
+    try {
+      const frontendUrl = window.location.origin;
+
+      const result = await signIn.social({
+        provider: "google",
+        callbackURL: `${frontendUrl}/auth/redirect`,
+        errorCallbackURL: `${frontendUrl}/sign-in?error=google`,
+      });
+
+      if (result.error) {
+        setErrorMessage(
+          result.error.message || "Google sign-in failed."
+        );
+        setIsLoading(false);
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Google sign-in failed."
+      );
+      setIsLoading(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-[#faf8f5]">
       <div className="grid min-h-screen lg:grid-cols-2">
@@ -92,16 +141,20 @@ function SignInForm() {
             <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#d8b77c] text-[#34232e]">
               <Heart size={22} fill="currentColor" />
             </span>
-            <span className="text-2xl font-semibold tracking-wide">WedPlan</span>
+            <span className="text-2xl font-semibold tracking-wide">
+              WedPlan
+            </span>
           </Link>
 
           <div className="relative z-10 max-w-lg">
             <p className="mb-5 text-sm font-semibold uppercase tracking-[0.3em] text-[#e2c99d]">
               Welcome back
             </p>
+
             <h1 className="text-5xl font-semibold leading-tight xl:text-6xl">
               Your dream wedding is closer than you think.
             </h1>
+
             <p className="mt-6 max-w-md text-lg leading-8 text-white/75">
               Sign in to continue discovering wedding services and managing
               your special day with WedPlan.
@@ -135,9 +188,11 @@ function SignInForm() {
               <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-[#a47d50]">
                 Welcome to WedPlan
               </p>
+
               <h2 className="text-3xl font-semibold tracking-tight text-[#34232e] sm:text-4xl">
                 Sign in to your account
               </h2>
+
               <p className="mt-3 text-sm leading-6 text-[#81777a]">
                 Enter your account details to continue.
               </p>
@@ -149,6 +204,30 @@ function SignInForm() {
               </div>
             )}
 
+            {googleError && (
+              <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                Google authentication was unsuccessful. Please try again.
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={isLoading}
+              className="flex w-full items-center justify-center gap-3 rounded-xl border border-[#e6ded8] bg-white px-5 py-3.5 text-sm font-semibold text-[#49313e] transition hover:bg-[#f8f5f1] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span className="text-lg font-bold">G</span>
+              Continue with Google
+            </button>
+
+            <div className="my-5 flex items-center gap-4">
+              <div className="h-px flex-1 bg-[#e6ded8]" />
+              <span className="text-xs text-[#a39799]">
+                OR CONTINUE WITH EMAIL
+              </span>
+              <div className="h-px flex-1 bg-[#e6ded8]" />
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label
@@ -157,11 +236,13 @@ function SignInForm() {
                 >
                   Email address
                 </label>
+
                 <div className="relative">
                   <Mail
                     size={18}
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-[#a39799]"
                   />
+
                   <input
                     id="email"
                     type="email"
@@ -170,6 +251,7 @@ function SignInForm() {
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     required
+                    disabled={isLoading}
                     className="w-full rounded-xl border border-[#e6ded8] bg-white py-3.5 pl-11 pr-4 text-sm text-[#49313e] outline-none transition placeholder:text-[#b0a6a5] focus:border-[#ad8454] focus:ring-2 focus:ring-[#ad8454]/15"
                   />
                 </div>
@@ -182,11 +264,13 @@ function SignInForm() {
                 >
                   Password
                 </label>
+
                 <div className="relative">
                   <LockKeyhole
                     size={18}
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-[#a39799]"
                   />
+
                   <input
                     id="password"
                     type={showPassword ? "text" : "password"}
@@ -195,8 +279,10 @@ function SignInForm() {
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     required
+                    disabled={isLoading}
                     className="w-full rounded-xl border border-[#e6ded8] bg-white py-3.5 pl-11 pr-12 text-sm text-[#49313e] outline-none transition placeholder:text-[#b0a6a5] focus:border-[#ad8454] focus:ring-2 focus:ring-[#ad8454]/15"
                   />
+
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -246,6 +332,7 @@ function SignInForm() {
     </main>
   );
 }
+
 export default function SignInPage() {
   return (
     <Suspense

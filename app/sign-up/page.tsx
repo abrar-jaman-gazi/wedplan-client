@@ -1,9 +1,10 @@
+
 "use client";
 
-import { FormEvent, useState } from "react";
+import { Suspense, useState } from "react";
+import type { FormEvent } from "react";
 import Link from "next/link";
-
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -17,13 +18,13 @@ import {
   User,
   UserRound,
 } from "lucide-react";
-
-import { signUp } from "@/lib/auth-client";
+import { signIn, signUp } from "@/lib/auth-client";
 
 type AccountRole = "customer" | "vendor";
 
-export default function SignUpPage() {
+function SignUpForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [role, setRole] = useState<AccountRole>("customer");
   const [name, setName] = useState("");
@@ -35,6 +36,50 @@ export default function SignUpPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const googleError = searchParams.get("error") === "google";
+
+  const handleGoogleSignUp = async () => {
+    setErrorMessage("");
+
+    if (role === "vendor" && businessName.trim().length < 2) {
+      setErrorMessage("Please enter your business name.");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const frontendUrl = window.location.origin;
+
+      const result = await signIn.social({
+        provider: "google",
+        additionalData: {
+          role,
+          ...(role === "vendor"
+            ? { businessName: businessName.trim() }
+            : {}),
+        },
+        callbackURL: `${frontendUrl}/auth/redirect`,
+        newUserCallbackURL: `${frontendUrl}/auth/redirect`,
+        errorCallbackURL: `${frontendUrl}/sign-up?error=google`,
+      });
+
+      if (result.error) {
+        setErrorMessage(
+          result.error.message || "Google registration failed."
+        );
+        setIsLoading(false);
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Google registration failed."
+      );
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -52,6 +97,16 @@ export default function SignUpPage() {
 
     if (password.length < 8) {
       setErrorMessage("Your password must contain at least 8 characters.");
+      return;
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      setErrorMessage("Your password must contain at least one uppercase letter.");
+      return;
+    }
+
+    if (!/[a-z]/.test(password)) {
+      setErrorMessage("Your password must contain at least one lowercase letter.");
       return;
     }
 
@@ -76,7 +131,6 @@ export default function SignUpPage() {
         ...(role === "vendor"
           ? { businessName: businessName.trim() }
           : {}),
-        
       });
 
       if (result.error) {
@@ -188,6 +242,8 @@ export default function SignUpPage() {
                 <button
                   type="button"
                   onClick={() => setRole("customer")}
+                  disabled={isLoading}
+                  aria-pressed={role === "customer"}
                   className={`rounded-xl border p-4 text-left transition ${
                     role === "customer"
                       ? "border-[#ad8454] bg-[#f3eadd] ring-1 ring-[#ad8454]"
@@ -211,6 +267,8 @@ export default function SignUpPage() {
                 <button
                   type="button"
                   onClick={() => setRole("vendor")}
+                  disabled={isLoading}
+                  aria-pressed={role === "vendor"}
                   className={`rounded-xl border p-4 text-left transition ${
                     role === "vendor"
                       ? "border-[#ad8454] bg-[#f3eadd] ring-1 ring-[#ad8454]"
@@ -233,6 +291,68 @@ export default function SignUpPage() {
               </div>
             </div>
 
+            {role === "vendor" && (
+              <div className="mb-5">
+                <label
+                  htmlFor="googleBusinessName"
+                  className="mb-2 block text-sm font-medium text-[#493d43]"
+                >
+                  Business name for Google registration
+                </label>
+
+                <div className="relative">
+                  <Store
+                    size={18}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-[#a39799]"
+                  />
+                  <input
+                    id="googleBusinessName"
+                    type="text"
+                    autoComplete="organization"
+                    placeholder="Enter your business name"
+                    value={businessName}
+                    onChange={(event) => setBusinessName(event.target.value)}
+                    minLength={2}
+                    disabled={isLoading}
+                    className="w-full rounded-xl border border-[#e6ded8] bg-white py-3.5 pl-11 pr-4 text-sm text-[#49313e] outline-none transition placeholder:text-[#b0a6a5] focus:border-[#ad8454] focus:ring-2 focus:ring-[#ad8454]/15"
+                  />
+                </div>
+              </div>
+            )}
+
+            {googleError && (
+              <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                Google registration was unsuccessful. Please try again.
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleGoogleSignUp}
+              disabled={isLoading}
+              className="flex w-full items-center justify-center gap-3 rounded-xl border border-[#e6ded8] bg-white px-5 py-3.5 text-sm font-semibold text-[#49313e] transition hover:bg-[#f8f5f1] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span className="text-lg font-bold">G</span>
+              Continue with Google
+            </button>
+
+            <div className="my-5 flex items-center gap-4">
+              <div className="h-px flex-1 bg-[#e6ded8]" />
+              <span className="text-xs text-[#a39799]">
+                OR REGISTER WITH EMAIL
+              </span>
+              <div className="h-px flex-1 bg-[#e6ded8]" />
+            </div>
+
+            {errorMessage && (
+              <div
+                role="alert"
+                className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              >
+                {errorMessage}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label
@@ -247,6 +367,7 @@ export default function SignUpPage() {
                     size={18}
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-[#a39799]"
                   />
+
                   <input
                     id="name"
                     type="text"
@@ -256,41 +377,42 @@ export default function SignUpPage() {
                     onChange={(event) => setName(event.target.value)}
                     required
                     minLength={2}
+                    disabled={isLoading}
                     className="w-full rounded-xl border border-[#e6ded8] bg-white py-3.5 pl-11 pr-4 text-sm text-[#49313e] outline-none transition placeholder:text-[#b0a6a5] focus:border-[#ad8454] focus:ring-2 focus:ring-[#ad8454]/15"
                   />
                 </div>
               </div>
 
-              {role === "vendor" && (
-                <div>
-                  <label
-                    htmlFor="businessName"
-                    className="mb-2 block text-sm font-medium text-[#493d43]"
-                  >
-                    Business name
-                  </label>
+              <div>
+                <label
+                  htmlFor="businessName"
+                  className="mb-2 block text-sm font-medium text-[#493d43]"
+                >
+                  Business name
+                </label>
 
+                {role === "vendor" && (
                   <div className="relative">
                     <Store
                       size={18}
                       className="absolute left-4 top-1/2 -translate-y-1/2 text-[#a39799]"
                     />
+
                     <input
                       id="businessName"
                       type="text"
                       autoComplete="organization"
                       placeholder="Enter your business name"
                       value={businessName}
-                      onChange={(event) =>
-                        setBusinessName(event.target.value)
-                      }
+                      onChange={(event) => setBusinessName(event.target.value)}
                       required
                       minLength={2}
+                      disabled={isLoading}
                       className="w-full rounded-xl border border-[#e6ded8] bg-white py-3.5 pl-11 pr-4 text-sm text-[#49313e] outline-none transition placeholder:text-[#b0a6a5] focus:border-[#ad8454] focus:ring-2 focus:ring-[#ad8454]/15"
                     />
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               <div>
                 <label
@@ -305,6 +427,7 @@ export default function SignUpPage() {
                     size={18}
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-[#a39799]"
                   />
+
                   <input
                     id="email"
                     type="email"
@@ -313,6 +436,7 @@ export default function SignUpPage() {
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     required
+                    disabled={isLoading}
                     className="w-full rounded-xl border border-[#e6ded8] bg-white py-3.5 pl-11 pr-4 text-sm text-[#49313e] outline-none transition placeholder:text-[#b0a6a5] focus:border-[#ad8454] focus:ring-2 focus:ring-[#ad8454]/15"
                   />
                 </div>
@@ -331,18 +455,21 @@ export default function SignUpPage() {
                     size={18}
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-[#a39799]"
                   />
+
                   <input
                     id="password"
                     type={showPassword ? "text" : "password"}
                     autoComplete="new-password"
-                    placeholder="At least 8 characters"
+                    placeholder="8+ characters, uppercase and lowercase"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     required
                     minLength={8}
                     maxLength={128}
+                    disabled={isLoading}
                     className="w-full rounded-xl border border-[#e6ded8] bg-white py-3.5 pl-11 pr-12 text-sm text-[#49313e] outline-none transition placeholder:text-[#b0a6a5] focus:border-[#ad8454] focus:ring-2 focus:ring-[#ad8454]/15"
                   />
+
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -367,6 +494,7 @@ export default function SignUpPage() {
                     size={18}
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-[#a39799]"
                   />
+
                   <input
                     id="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
@@ -377,8 +505,10 @@ export default function SignUpPage() {
                       setConfirmPassword(event.target.value)
                     }
                     required
+                    disabled={isLoading}
                     className="w-full rounded-xl border border-[#e6ded8] bg-white py-3.5 pl-11 pr-12 text-sm text-[#49313e] outline-none transition placeholder:text-[#b0a6a5] focus:border-[#ad8454] focus:ring-2 focus:ring-[#ad8454]/15"
                   />
+
                   <button
                     type="button"
                     onClick={() =>
@@ -397,15 +527,6 @@ export default function SignUpPage() {
                   </button>
                 </div>
               </div>
-
-              {errorMessage && (
-                <div
-                  role="alert"
-                  className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-                >
-                  {errorMessage}
-                </div>
-              )}
 
               <button
                 type="submit"
@@ -434,5 +555,20 @@ export default function SignUpPage() {
         </section>
       </div>
     </main>
+  );
+}
+  export default function SignUpPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-[#faf8f5]">
+          <p className="text-sm text-[#786b70]">
+            Loading sign-up page...
+          </p>
+        </main>
+      }
+    >
+      <SignUpForm />
+    </Suspense>
   );
 }
